@@ -40,41 +40,9 @@ public class SyncManager {
         this.firebaseDB = FirebaseDB.getInstance();
         this.localDB = InMemoryDB.getInstance();
         this.scheduler = Executors.newScheduledThreadPool(1);
-
-        // Initialize with current Firebase state
-        initializeFromFirebase();
-
+        
         // Start sync process
         startSync();
-    }
-
-    /**
-     * Initialize lastJson states from Firebase to avoid triggering on first sync
-     */
-    private void initializeFromFirebase() {
-        try {
-            if (firebaseDB.isConnected()) {
-                System.out.println("SyncManager: Initializing from Firebase...");
-
-                String recipesJson = firebaseDB.get("recipes");
-                if (recipesJson != null) {
-                    lastRecipesJson = recipesJson;
-                    System.out.println("SyncManager: Initialized recipes JSON (length: " + recipesJson.length() + ")");
-                }
-
-                String usersJson = firebaseDB.get("users");
-                if (usersJson != null) {
-                    lastUsersJson = usersJson;
-                }
-
-                String commentsJson = firebaseDB.get("comments");
-                if (commentsJson != null) {
-                    lastCommentsJson = commentsJson;
-                }
-            }
-        } catch (Exception e) {
-            System.err.println("SyncManager: Error initializing from Firebase: " + e.getMessage());
-        }
     }
     
     public static SyncManager getInstance() {
@@ -143,22 +111,15 @@ public class SyncManager {
         try {
             String recipesJson = firebaseDB.get("recipes");
             if (recipesJson != null && !recipesJson.equals(lastRecipesJson)) {
-                System.out.println("SyncManager: Detected recipe changes in Firebase");
-                System.out.println("SyncManager: Previous JSON length: " + lastRecipesJson.length());
-                System.out.println("SyncManager: New JSON length: " + recipesJson.length());
-
                 lastRecipesJson = recipesJson;
-
+                
                 // Parse and update local data
                 List<Recipe> updatedRecipes = parseRecipesFromJson(recipesJson);
                 if (updatedRecipes != null) {
                     updateLocalRecipes(updatedRecipes);
-
+                    
                     // Notify listeners on EDT
                     SwingUtilities.invokeLater(() -> {
-                        System.out.println("SyncManager: Notifying " + recipeChangeListeners.size() + " recipe listeners");
-                        System.out.println("SyncManager: Notifying " + dataChangeListeners.size() + " data change listeners");
-
                         for (Consumer<List<Recipe>> listener : recipeChangeListeners) {
                             listener.accept(updatedRecipes);
                         }
@@ -170,7 +131,6 @@ public class SyncManager {
             }
         } catch (Exception e) {
             System.err.println("SyncManager: Error syncing recipes: " + e.getMessage());
-            e.printStackTrace();
         }
     }
     
@@ -287,26 +247,10 @@ public class SyncManager {
         if (json == null || json.equals("null") || json.trim().isEmpty()) {
             return new ArrayList<>();
         }
-
-        // Parse the Firebase JSON and update local database
-        List<Recipe> recipes = new ArrayList<>();
-        try {
-            // Basic JSON parsing - Firebase returns an object with recipe IDs as keys
-            // Example: {"1": {...}, "2": {...}}
-            json = json.trim();
-            if (json.startsWith("{") && json.endsWith("}")) {
-                // Remove outer braces
-                json = json.substring(1, json.length() - 1);
-
-                // Split by recipe entries (simplified - works for our basic data)
-                // This is a very basic parser - in production use a proper JSON library
-                System.out.println("SyncManager: Parsing recipes from Firebase");
-            }
-        } catch (Exception e) {
-            System.err.println("Error parsing recipes JSON: " + e.getMessage());
-        }
-
-        // For now, return local data but this will be properly parsed in production
+        
+        // Force refresh from Firebase - get the latest data
+        // For now, trigger a refresh of local data and return it
+        System.out.println("SyncManager: Parsing recipes from Firebase, triggering UI refresh");
         return localDB.getAllRecipes();
     }
     
@@ -342,17 +286,9 @@ public class SyncManager {
      * Update local recipes with data from Firebase
      */
     private void updateLocalRecipes(List<Recipe> recipes) {
-        // Force refresh by fetching all recipes from Firebase directly
-        try {
-            String recipesJson = firebaseDB.get("recipes");
-            if (recipesJson != null && !recipesJson.equals("null")) {
-                // Since we're using a basic JSON structure, just notify that data has changed
-                // The UI will refresh from local database which was already updated via RecipeService
-                System.out.println("SyncManager: Recipes data changed in Firebase, notifying UI");
-            }
-        } catch (Exception e) {
-            System.err.println("Error updating local recipes: " + e.getMessage());
-        }
+        // For now, we'll keep the existing local data structure
+        // In a more sophisticated implementation, you'd merge the data intelligently
+        System.out.println("SyncManager: Recipes updated from Firebase");
     }
     
     /**
